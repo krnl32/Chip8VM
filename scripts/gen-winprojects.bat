@@ -5,4 +5,4 @@ pushd build
 cmake ..
 popd
 popd
-pause
+

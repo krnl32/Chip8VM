@@ -14,7 +14,6 @@ if (CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
 		$<$<CONFIG:Debug>:-ggdb3>
 		$<$<CONFIG:Debug>:-Og>
 		$<$<CONFIG:Debug>:-DDEBUG>
-		$<$<CONFIG:Debug>:-fsanitize=address,undefined>
 		$<$<CONFIG:Debug>:-fno-omit-frame-pointer>
 		$<$<CONFIG:Debug>:-Wall>
 		$<$<CONFIG:Debug>:-Wextra>
@@ -59,5 +58,16 @@ else()
 endif()
 
 set(CHIP8VM_TARGET_NAME chip8vm)
+
+# Extensions
+include(FetchContent)
+
+FetchContent_Declare(
+        sdl2
+        GIT_REPOSITORY "https://github.com/libsdl-org/SDL"
+        GIT_TAG "release-2.32.10"
+        GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(sdl2)
 
 add_subdirectory(${CHIP8VM_TARGET_NAME})

@@ -5,6 +5,7 @@ config.json
 # Folders
 Build/
 out/
+.idea/
 
 # VS
 .vscode/
@@ -15,6 +16,7 @@ out/
 **.vcxproj.user
 
 # Others
+CmakeSettings.json
 *.tmp
 *.log
 *.expand

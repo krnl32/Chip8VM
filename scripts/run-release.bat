@@ -7,4 +7,4 @@ if exist %EXE_NAME% (
     echo Release executable "%EXE_NAME%" not found!
 )
 popd
-pause
+

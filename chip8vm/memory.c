@@ -4,7 +4,7 @@
 #include <string.h>
 #include <assert.h>
 
-struct c8vm_memory *c8vm_memory_create()
+struct c8vm_memory *c8vm_memory_create(void)
 {
 	struct c8vm_memory *c8vm_memory = malloc(sizeof(struct c8vm_memory));
 
@@ -25,19 +25,19 @@ void c8vm_memory_destroy(struct c8vm_memory *c8vm_memory)
 
 uint8_t c8vm_memory_read_uint8(const struct c8vm_memory *c8vm_memory, uint16_t offset)
 {
-	assert(offset < C8VM_MEMORY_SIZE);
+	assert(offset < C8VM_MEMORY_SIZE && "c8vm_memory_read_uint8 offset out of bounds");
 	return c8vm_memory->memory[offset];
 }
 
 void c8vm_memory_write_uint8(struct c8vm_memory *c8vm_memory, uint16_t offset, uint8_t data)
 {
-	assert(offset < C8VM_MEMORY_SIZE);
+	assert(offset < C8VM_MEMORY_SIZE && "c8vm_memory_write_uint8 offset out of bounds");
 	c8vm_memory->memory[offset] = data;
 }
 
 uint16_t c8vm_memory_read_uint16(const struct c8vm_memory *c8vm_memory, uint16_t offset)
 {
-	assert(offset <= C8VM_MEMORY_SIZE - 2);
+	assert(offset <= C8VM_MEMORY_SIZE - 2 && "c8vm_memory_read_uint16 offset out of bounds");
 	uint8_t high = c8vm_memory->memory[offset];
 	uint8_t low = c8vm_memory->memory[offset + 1];
 	return ((uint16_t)high << 8) | low;
@@ -45,9 +45,9 @@ uint16_t c8vm_memory_read_uint16(const struct c8vm_memory *c8vm_memory, uint16_t
 
 void c8vm_memory_write_uint16(struct c8vm_memory *c8vm_memory, uint16_t offset, uint16_t data)
 {
-	assert(offset <= C8VM_MEMORY_SIZE - 2);
-	uint8_t high = (data >> 8) & 0xFF;
-	uint8_t low = data & 0xFF;
+	assert(offset <= C8VM_MEMORY_SIZE - 2 && "c8vm_memory_write_uint16 offset out of bounds");
+	uint8_t high = (uint8_t)((data >> 8) & 0xFF);
+	uint8_t low = (uint8_t)(data & 0xFF);
 	c8vm_memory->memory[offset] = high;
 	c8vm_memory->memory[offset + 1] = low;
 }

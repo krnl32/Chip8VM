@@ -9,7 +9,7 @@ struct c8vm_timer {
 	uint64_t last_tick_ms;
 };
 
-struct c8vm_timer *c8vm_timer_create();
+struct c8vm_timer *c8vm_timer_create(void);
 void c8vm_timer_destroy(struct c8vm_timer *c8vm_timer);
 void c8vm_timer_update(struct c8vm_timer *c8vm_timer, struct c8vm_register *c8vm_register);
 

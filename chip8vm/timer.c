@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <math.h>
 
-struct c8vm_timer *c8vm_timer_create()
+struct c8vm_timer *c8vm_timer_create(void)
 {
 	struct c8vm_timer *c8vm_timer = malloc(sizeof(struct c8vm_timer));
 

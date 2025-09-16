@@ -4,7 +4,7 @@
 #include <string.h>
 #include <assert.h>
 
-struct c8vm_register *c8vm_register_create()
+struct c8vm_register *c8vm_register_create(void)
 {
 	struct c8vm_register *c8vm_register = malloc(sizeof(struct c8vm_register));
 
@@ -25,13 +25,13 @@ void c8vm_register_destroy(struct c8vm_register *c8vm_register)
 
 uint8_t c8vm_register_read_v(const struct c8vm_register *c8vm_register, uint8_t vreg)
 {
-	assert(vreg < C8VM_REGISTER_GPR_SIZE);
+	assert(vreg < C8VM_REGISTER_GPR_SIZE && "c8vm_register_read_v vreg out of bounds");
 	return c8vm_register->v[vreg];
 }
 
 void c8vm_register_write_v(struct c8vm_register *c8vm_register, uint8_t vreg, uint8_t data)
 {
-	assert(vreg < C8VM_REGISTER_GPR_SIZE);
+	assert(vreg < C8VM_REGISTER_GPR_SIZE && "c8vm_register_write_v vreg out of bounds");
 	c8vm_register->v[vreg] = data;
 }
 

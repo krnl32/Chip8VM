@@ -3,8 +3,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <stdio.h>
 
-struct c8vm_stack *c8vm_stack_create()
+struct c8vm_stack *c8vm_stack_create(void)
 {
 	struct c8vm_stack *c8vm_stack = malloc(sizeof(struct c8vm_stack));
 
@@ -43,4 +44,18 @@ uint16_t c8vm_stack_pop_uint16(struct c8vm_stack *c8vm_stack, struct c8vm_regist
 	c8vm_register_write_sp(c8vm_register, sp);
 
 	return value;
+}
+
+bool c8vm_stack_is_full(const struct c8vm_stack *c8vm_stack, const struct c8vm_register *c8vm_register)
+{
+	(void)c8vm_stack;
+	uint8_t sp = c8vm_register_read_sp(c8vm_register);
+	return sp >= C8VM_STACK_SIZE;
+}
+
+bool c8vm_stack_is_empty(const struct c8vm_stack *c8vm_stack, const struct c8vm_register *c8vm_register)
+{
+	(void)c8vm_stack;
+	uint8_t sp = c8vm_register_read_sp(c8vm_register);
+	return sp == 0;
 }

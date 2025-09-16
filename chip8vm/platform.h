@@ -12,13 +12,13 @@ struct c8vm_platform {
 	SDL_Renderer *renderer;
 };
 
-struct c8vm_platform *c8vm_platform_create();
+struct c8vm_platform *c8vm_platform_create(void);
 void c8vm_platform_destroy(struct c8vm_platform *c8vm_platform);
 
 void c8vm_platform_poll(struct c8vm_platform *c8vm_platform, struct c8vm_vm *c8vm_vm);
 void c8vm_platform_render(struct c8vm_platform *c8vm_platform, const struct c8vm_vm *c8vm_vm);
-void c8vm_platform_delay(struct c8vm_platform *c8vm_platform, uint32_t ms);
+void c8vm_platform_delay(uint32_t ms);
 
-char c8vm_platform_wait_for_key_press();
+int c8vm_platform_wait_for_key_press(void);
 
 #endif

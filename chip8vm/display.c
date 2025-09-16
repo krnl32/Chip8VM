@@ -2,9 +2,10 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 #include <assert.h>
 
-struct c8vm_display *c8vm_display_create()
+struct c8vm_display *c8vm_display_create(void)
 {
 	struct c8vm_display *c8vm_display = malloc(sizeof(struct c8vm_display));
 
@@ -35,12 +36,19 @@ void c8vm_display_set_pixel(struct c8vm_display *c8vm_display, uint8_t x, uint8_
 	c8vm_display->pixels[y][x] = state;
 }
 
-bool c8vm_display_draw_sprite(struct c8vm_display *c8vm_display, uint8_t x, uint8_t y, const uint8_t *sprite, uint8_t count)
+int c8vm_display_draw_sprite(struct c8vm_display *c8vm_display, uint8_t x, uint8_t y, const uint8_t *sprite, uint8_t count)
 {
-	assert((x < C8VM_DISPLAY_WIDTH && y < C8VM_DISPLAY_HEIGHT) && "c8vm_display_draw_sprite coordinates out of bounds");
-	assert(count <= C8VM_DISPLAY_HEIGHT && "c8vm_display_draw_sprite sprite count out of bounds");
+	if (x >= C8VM_DISPLAY_WIDTH && y >= C8VM_DISPLAY_HEIGHT) {
+		fprintf(stderr, "c8vm_display_draw_sprite coordinates out of bounds: %d,%d\n", x, y);
+		return -1;
+	}
 
-	bool collision = false;
+	if (count > C8VM_DISPLAY_HEIGHT) {
+		fprintf(stderr, "c8vm_display_draw_sprite sprite count out of bounds: %d\n", count);
+		return -1;
+	}
+
+	int collision = 0;
 
 	for (uint8_t sy = 0; sy < count; sy++) {
 		uint8_t spr = sprite[sy];

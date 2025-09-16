@@ -11,6 +11,7 @@
 #define C8VM_CHARACTER_SET_SIZE 80
 #define C8VM_CHARACTER_SET_HEIGHT 5
 #define C8VM_CPU_CYCLES_PER_FRAME 10
+#define C8VM_INSTRUCTION_SIZE 2
 
 struct c8vm_vm {
 	struct c8vm_memory *c8vm_memory;
@@ -21,10 +22,10 @@ struct c8vm_vm {
 	struct c8vm_timer *c8vm_timer;
 };
 
-struct c8vm_vm *c8vm_vm_create();
+struct c8vm_vm *c8vm_vm_create(void);
 void c8vm_vm_destroy(struct c8vm_vm *c8vm_vm);
 
-bool c8vm_vm_load_rom(struct c8vm_vm *c8vm_vm, const char *rompath);
-void c8vm_vm_cpu_cycle(struct c8vm_vm *c8vm_vm);
+int c8vm_vm_load_rom(struct c8vm_vm *c8vm_vm, const char *rompath);
+int c8vm_vm_cpu_cycle(struct c8vm_vm *c8vm_vm);
 
 #endif

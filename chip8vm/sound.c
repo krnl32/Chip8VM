@@ -1,26 +1,30 @@
 #include "chip8vm/sound.h"
 
 #include <SDL_audio.h>
+
 #include <stdio.h>
+#include <stdbool.h>
 
 static SDL_AudioDeviceID audio_device;
-static bool audio_initialized = false;
+static bool audio_initialized;
 
 static void sdl_audio_callback(void *userdata, Uint8 *stream, int len)
 {
+	(void)userdata;
 	static int phase = 0;
 	int freq = 440;
 	int volume = 64;
 
 	for (int i = 0; i < len; i++) {
-		stream[i] = ((phase++ / (44100 / freq / 2)) % 2) ? volume : -volume;
+		int sample = ((phase++ / (44100 / freq / 2)) % 2) ? (128 + volume) : (128 - volume);
+		stream[i] = (Uint8)sample;
 	}
 }
 
-bool c8vm_sound_create()
+int c8vm_sound_init(void)
 {
 	if (audio_initialized) {
-		return true;
+		return 0;
 	}
 
 	SDL_AudioSpec want, have;
@@ -34,14 +38,15 @@ bool c8vm_sound_create()
 	audio_device = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
 
 	if (audio_device == 0) {
-		printf("SDL_OpenAudioDevice failed: %s\n", SDL_GetError());
-		return false;
+		fprintf(stderr, "SDL_OpenAudioDevice failed: %s\n", SDL_GetError());
+		return -1;
 	}
 
-	return audio_initialized = true;
+	audio_initialized = true;
+	return 0;
 }
 
-void c8vm_sound_destroy()
+void c8vm_sound_destroy(void)
 {
 	if (audio_initialized) {
 		SDL_CloseAudioDevice(audio_device);
@@ -49,14 +54,14 @@ void c8vm_sound_destroy()
 	}
 }
 
-void c8vm_sound_start()
+void c8vm_sound_start(void)
 {
 	if (audio_initialized) {
 		SDL_PauseAudioDevice(audio_device, 0);
 	}
 }
 
-void c8vm_sound_stop()
+void c8vm_sound_stop(void)
 {
 	if (audio_initialized) {
 		SDL_PauseAudioDevice(audio_device, 1);

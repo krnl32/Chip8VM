@@ -8,7 +8,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-struct c8vm_platform *c8vm_platform_create()
+struct c8vm_platform *c8vm_platform_create(void)
 {
 	struct c8vm_platform *c8vm_platform = malloc(sizeof(struct c8vm_platform));
 
@@ -22,14 +22,14 @@ struct c8vm_platform *c8vm_platform_create()
 	c8vm_platform->window = SDL_CreateWindow("Chip8VM", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 640, 320, SDL_WINDOW_SHOWN);
 
 	if (!c8vm_platform->window) {
-		printf("SDL_CreateWindow failed\n");
+		fprintf(stderr, "SDL_CreateWindow failed\n");
 		return NULL;
 	}
 
 	c8vm_platform->renderer = SDL_CreateRenderer(c8vm_platform->window, 0, SDL_TEXTUREACCESS_TARGET);
 
 	if (!c8vm_platform->renderer) {
-		printf("SDL_CreateRenderer failed\n");
+		fprintf(stderr, "SDL_CreateRenderer failed\n");
 		return NULL;
 	}
 
@@ -66,6 +66,9 @@ void c8vm_platform_poll(struct c8vm_platform *c8vm_platform, struct c8vm_vm *c8v
 			case SDL_KEYUP:
 				c8vm_keyboard_set_key_state(c8vm_vm->c8vm_keyboard, ev.key.keysym.sym, false);
 				break;
+
+			default:
+				break;
 		}
 	}
 }
@@ -92,16 +95,20 @@ void c8vm_platform_render(struct c8vm_platform *c8vm_platform, const struct c8vm
 	SDL_RenderPresent(c8vm_platform->renderer);
 }
 
-void c8vm_platform_delay(struct c8vm_platform *c8vm_platform, uint32_t ms)
+void c8vm_platform_delay(uint32_t ms)
 {
 	SDL_Delay(ms);
 }
 
-char c8vm_platform_wait_for_key_press()
+int c8vm_platform_wait_for_key_press(void)
 {
 	SDL_Event ev;
 
 	while (SDL_WaitEvent(&ev)) {
+		if (ev.type == SDL_QUIT) {
+			return -1;
+		}
+
 		if (ev.type == SDL_KEYDOWN) {
 			return ev.key.keysym.sym;
 		}

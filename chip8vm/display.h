@@ -17,13 +17,13 @@ struct c8vm_display {
 	bool pixels[C8VM_DISPLAY_HEIGHT][C8VM_DISPLAY_WIDTH];
 };
 
-struct c8vm_display *c8vm_display_create();
+struct c8vm_display *c8vm_display_create(void);
 void c8vm_display_destroy(struct c8vm_display *c8vm_display);
 
 bool c8vm_display_get_pixel(const struct c8vm_display *c8vm_display, uint8_t x, uint8_t y);
 void c8vm_display_set_pixel(struct c8vm_display *c8vm_display, uint8_t x, uint8_t y, bool state);
 
-bool c8vm_display_draw_sprite(struct c8vm_display *c8vm_display, uint8_t x, uint8_t y, const uint8_t *sprite, uint8_t count); /* return true if any pixel is erased */
+int c8vm_display_draw_sprite(struct c8vm_display *c8vm_display, uint8_t x, uint8_t y, const uint8_t *sprite, uint8_t count); /* return 1 if any pixel is erased, 0 if no pixel is erased, -1 for errors */
 
 void c8vm_display_clear(struct c8vm_display *c8vm_display);
 

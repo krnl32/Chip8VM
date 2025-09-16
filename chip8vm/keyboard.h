@@ -27,17 +27,16 @@ struct c8vm_keyboard {
 	enum c8vm_keycode key_map[C8VM_ASCII_SIZE];
 };
 
-struct c8vm_keyboard *c8vm_keyboard_create();
+struct c8vm_keyboard *c8vm_keyboard_create(void);
 void c8vm_keyboard_destroy(struct c8vm_keyboard *c8vm_keyboard);
 
-bool c8vm_keyboard_get_key_state(const struct c8vm_keyboard *c8vm_keyboard, char key);
-void c8vm_keyboard_set_key_state(struct c8vm_keyboard *c8vm_keyboard, char key, bool state);
+bool c8vm_keyboard_get_key_state(const struct c8vm_keyboard *c8vm_keyboard, int key);
+void c8vm_keyboard_set_key_state(struct c8vm_keyboard *c8vm_keyboard, int key, bool state);
 
-bool c8vm_keyboard_is_key_down(const struct c8vm_keyboard *c8vm_keyboard, char key);
-bool c8vm_keyboard_is_key_up(const struct c8vm_keyboard *c8vm_keyboard, char key);
+bool c8vm_keyboard_is_key_down(const struct c8vm_keyboard *c8vm_keyboard, enum c8vm_keycode keycode);
+bool c8vm_keyboard_is_key_up(const struct c8vm_keyboard *c8vm_keyboard, enum c8vm_keycode keycode);
 
-void c8vm_keyboard_remap(struct c8vm_keyboard *c8vm_keyboard, const enum c8vm_keycode *key_codes, const char *keys, size_t count);
-enum c8vm_keycode c8vm_keyboard_key_to_keycode(struct c8vm_keyboard *c8vm_keyboard, char key);
-char c8vm_keyboard_keycode_to_key(struct c8vm_keyboard *c8vm_keyboard, enum c8vm_keycode keycode);
+void c8vm_keyboard_remap(struct c8vm_keyboard *c8vm_keyboard, const enum c8vm_keycode *key_codes, const int *keys, size_t count);
+enum c8vm_keycode c8vm_keyboard_get_mapped_keycode(const struct c8vm_keyboard *c8vm_keyboard, int key);
 
 #endif

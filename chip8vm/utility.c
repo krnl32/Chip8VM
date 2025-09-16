@@ -4,11 +4,11 @@
 #include <stdlib.h>
 #include <time.h>
 
-uint64_t c8vm_utility_get_time_ms()
+uint64_t c8vm_utility_get_time_ms(void)
 {
 	struct timespec ts;
 	clock_gettime(CLOCK_MONOTONIC, &ts);
-	return ts.tv_sec * 1000ULL + ts.tv_nsec / 1000000ULL;
+	return (uint64_t)ts.tv_sec * 1000ULL + (uint64_t)ts.tv_nsec / 1000000ULL;
 }
 
 void *c8vm_utility_read_binary_file(const char *path, size_t *out_size)
@@ -46,7 +46,7 @@ void *c8vm_utility_read_binary_file(const char *path, size_t *out_size)
 		return NULL;
 	}
 
-	void *buf = malloc(size);
+	void *buf = malloc((size_t)size);
 
 	if (!buf) {
 		perror("malloc");
@@ -54,7 +54,7 @@ void *c8vm_utility_read_binary_file(const char *path, size_t *out_size)
 		return NULL;
 	}
 
-	if (fread(buf, 1, size, fp) != size) {
+	if (fread(buf, 1, (size_t)size, fp) != (size_t)size) {
 		perror("fread");
 		free(buf);
 		fclose(fp);

@@ -23,20 +23,23 @@ file(GLOB_RECURSE CHIP8VM_SOURCES
 )
 
 add_executable(${CHIP8VM_TARGET_NAME} ${CHIP8VM_SOURCES})
+
+set_compile_options_for_target(${CHIP8VM_TARGET_NAME})
+
 target_include_directories(${CHIP8VM_TARGET_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../")
 target_include_directories(${CHIP8VM_TARGET_NAME} PRIVATE "${CMAKE_BINARY_DIR}/_deps/sdl2-src/include")
 
 target_link_libraries(${CHIP8VM_TARGET_NAME} PRIVATE SDL2::SDL2main SDL2::SDL2)
 
-FUNCTION(CopyLibToTarget LIB_NAME TARGET_NAME)
-	ADD_CUSTOM_COMMAND(TARGET ${TARGET_NAME}
+function(CopyLibToTarget LIB_NAME TARGET_NAME)
+	add_custom_command(TARGET ${TARGET_NAME}
 		POST_BUILD
 		COMMAND
 		${CMAKE_COMMAND} -E copy_if_different
 		$<TARGET_FILE:${LIB_NAME}>
 		$<TARGET_FILE_DIR:${TARGET_NAME}>
 	)
-ENDFUNCTION()
+endfunction()
 
 CopyLibToTarget(SDL2main ${CHIP8VM_TARGET_NAME})
 CopyLibToTarget(SDL2 ${CHIP8VM_TARGET_NAME})

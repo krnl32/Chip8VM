@@ -19,7 +19,7 @@ struct c8vm_memory {
 	uint8_t memory[C8VM_MEMORY_SIZE];
 };
 
-struct c8vm_memory *c8vm_memory_create();
+struct c8vm_memory *c8vm_memory_create(void);
 void c8vm_memory_destroy(struct c8vm_memory *c8vm_memory);
 
 uint8_t c8vm_memory_read_uint8(const struct c8vm_memory *c8vm_memory, uint16_t offset);

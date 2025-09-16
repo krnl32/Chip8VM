@@ -2,7 +2,6 @@
 #include "chip8vm/utility.h"
 #include "chip8vm/platform.h"
 
-#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -26,10 +25,10 @@ static const uint8_t c8vm_default_character_set[C8VM_CHARACTER_SET_SIZE] = {
 	0xF0, 0x80, 0xF0, 0x80, 0x80 // F
 };
 
-static void c8vm_vm_cpu_execute(struct c8vm_vm *c8vm_vm, uint16_t opcode);
+static int c8vm_vm_cpu_execute(struct c8vm_vm *c8vm_vm, uint16_t opcode);
 static void c8vm_vm_cpu_skip_instruction(struct c8vm_vm *c8vm_vm);
 
-struct c8vm_vm *c8vm_vm_create()
+struct c8vm_vm *c8vm_vm_create(void)
 {
 	struct c8vm_vm *c8vm_vm = malloc(sizeof(struct c8vm_vm));
 
@@ -67,54 +66,60 @@ void c8vm_vm_destroy(struct c8vm_vm *c8vm_vm)
 	}
 }
 
-bool c8vm_vm_load_rom(struct c8vm_vm *c8vm_vm, const char *rompath)
+int c8vm_vm_load_rom(struct c8vm_vm *c8vm_vm, const char *rompath)
 {
 	size_t rom_size = 0;
 	uint8_t *rom = c8vm_utility_read_binary_file(rompath, &rom_size);
 
 	if (!rom) {
 		printf("c8vm_utility_read_binary_file(rompath) failed\n");
-		return false;
+		return -1;
 	}
 
 	if (rom_size + C8VM_MEMORY_PROGRAM_START > C8VM_MEMORY_SIZE) {
 		fprintf(stderr, "ROM %s too large (%zu bytes) for C8VM\n", rompath, rom_size);
 		free(rom);
-		return false;
+		return -1;
 	}
 
 	memcpy(c8vm_vm->c8vm_memory->memory + C8VM_MEMORY_PROGRAM_START, rom, rom_size);
 	free(rom);
 
 	printf("c8vm loaded ROM: %s (%zu bytes)\n", rompath, rom_size);
-	return true;
+	return 0;
 }
 
-void c8vm_vm_cpu_cycle(struct c8vm_vm *c8vm_vm)
+int c8vm_vm_cpu_cycle(struct c8vm_vm *c8vm_vm)
 {
-	uint16_t pc = c8vm_register_read_pc(c8vm_vm->c8vm_register);
+	const uint16_t pc = c8vm_register_read_pc(c8vm_vm->c8vm_register);
 
-	if (pc + 1 >= C8VM_MEMORY_SIZE) {
-		fprintf(stderr, "PC out of bounds: 0x%X\n", pc);
-		return;
+	if (pc > C8VM_MEMORY_SIZE - C8VM_INSTRUCTION_SIZE) {
+		fprintf(stderr, "c8vm_vm_cpu_cycle PC out of bounds: 0x%X\n", pc);
+		return -1;
 	}
 
 	uint16_t opcode = c8vm_memory_read_uint16(c8vm_vm->c8vm_memory, pc);
 #ifdef DEBUG
 	printf("c8vm_vm_cpu_cycle executing opcode: 0x%04X at PC: 0x%03X\n", opcode, pc);
 #endif
-	c8vm_register_write_pc(c8vm_vm->c8vm_register, pc + 2);
-	c8vm_vm_cpu_execute(c8vm_vm, opcode);
+	c8vm_register_write_pc(c8vm_vm->c8vm_register, pc + C8VM_INSTRUCTION_SIZE);
+
+	if (c8vm_vm_cpu_execute(c8vm_vm, opcode) == -1) {
+		fprintf(stderr, "c8vm_vm_cpu_cycle failed to execute opcode: 0x%04X at PC: 0x%03X\n", opcode, pc);
+		return -1;
+	}
+
+	return 0;
 }
 
-static void c8vm_vm_cpu_execute(struct c8vm_vm *c8vm_vm, uint16_t opcode)
+static int c8vm_vm_cpu_execute(struct c8vm_vm *c8vm_vm, uint16_t opcode)
 {
 	// Decode
 	const uint16_t nnn = opcode & 0x0FFF;
 	const uint8_t n = opcode & 0x000F;
 	const uint8_t x = (opcode & 0x0F00) >> 8;
 	const uint8_t y = (opcode & 0x00F0) >> 4;
-	const uint8_t kk = opcode & 0x00FF;
+	const uint8_t kk = (uint8_t)(opcode & 0x00FF);
 
 	switch (opcode & 0xF000) {
 		case 0x0000: {
@@ -126,7 +131,12 @@ static void c8vm_vm_cpu_execute(struct c8vm_vm *c8vm_vm, uint16_t opcode)
 
 					/* return from a subroutine */
 				case 0x00EE: {
-					uint16_t pc = c8vm_stack_pop_uint16(c8vm_vm->c8vm_stack, c8vm_vm->c8vm_register);
+					if (c8vm_stack_is_empty(c8vm_vm->c8vm_stack, c8vm_vm->c8vm_register)) {
+						fprintf(stderr, "c8vm_vm_cpu_execute stack underflow\n");
+						return -1;
+					}
+
+					const uint16_t pc = c8vm_stack_pop_uint16(c8vm_vm->c8vm_stack, c8vm_vm->c8vm_register);
 					c8vm_register_write_pc(c8vm_vm->c8vm_register, pc);
 					break;
 				}
@@ -145,7 +155,12 @@ static void c8vm_vm_cpu_execute(struct c8vm_vm *c8vm_vm, uint16_t opcode)
 
 			/* call subroutine at nnn */
 		case 0x2000: {
-			uint16_t pc = c8vm_register_read_pc(c8vm_vm->c8vm_register);
+			if (c8vm_stack_is_full(c8vm_vm->c8vm_stack, c8vm_vm->c8vm_register)) {
+				fprintf(stderr, "c8vm_vm_cpu_execute stack overflow\n");
+				return -1;
+			}
+
+			const uint16_t pc = c8vm_register_read_pc(c8vm_vm->c8vm_register);
 			c8vm_stack_push_uint16(c8vm_vm->c8vm_stack, c8vm_vm->c8vm_register, pc);
 			c8vm_register_write_pc(c8vm_vm->c8vm_register, nnn);
 			break;
@@ -153,6 +168,11 @@ static void c8vm_vm_cpu_execute(struct c8vm_vm *c8vm_vm, uint16_t opcode)
 
 			/* skip next instruction if Vx == kk */
 		case 0x3000: {
+			if (x >= C8VM_REGISTER_GPR_SIZE) {
+				fprintf(stderr, "c8vm_vm_cpu_execute register Vx out of bounds: %d\n", x);
+				return -1;
+			}
+
 			const uint8_t vx = c8vm_register_read_v(c8vm_vm->c8vm_register, x);
 
 			if (vx == kk) {
@@ -164,6 +184,11 @@ static void c8vm_vm_cpu_execute(struct c8vm_vm *c8vm_vm, uint16_t opcode)
 
 			/* skip next instruction if Vx != kk */
 		case 0x4000: {
+			if (x >= C8VM_REGISTER_GPR_SIZE) {
+				fprintf(stderr, "c8vm_vm_cpu_execute register Vx out of bounds: %d\n", x);
+				return -1;
+			}
+
 			const uint8_t vx = c8vm_register_read_v(c8vm_vm->c8vm_register, x);
 
 			if (vx != kk) {
@@ -176,6 +201,16 @@ static void c8vm_vm_cpu_execute(struct c8vm_vm *c8vm_vm, uint16_t opcode)
 		case 0x5000: {
 			/* skip next instruction if Vx == Vy */
 			if (n == 0x0) {
+				if (x >= C8VM_REGISTER_GPR_SIZE) {
+					fprintf(stderr, "c8vm_vm_cpu_execute register Vx out of bounds: %d\n", x);
+					return -1;
+				}
+
+				if (y >= C8VM_REGISTER_GPR_SIZE) {
+					fprintf(stderr, "c8vm_vm_cpu_execute register Vy out of bounds: %d\n", y);
+					return -1;
+				}
+
 				const uint8_t vx = c8vm_register_read_v(c8vm_vm->c8vm_register, x);
 				const uint8_t vy = c8vm_register_read_v(c8vm_vm->c8vm_register, y);
 
@@ -190,12 +225,23 @@ static void c8vm_vm_cpu_execute(struct c8vm_vm *c8vm_vm, uint16_t opcode)
 		}
 
 			/* set Vx = kk */
-		case 0x6000:
+		case 0x6000: {
+			if (x >= C8VM_REGISTER_GPR_SIZE) {
+				fprintf(stderr, "c8vm_vm_cpu_execute register Vx out of bounds: %d\n", x);
+				return -1;
+			}
+
 			c8vm_register_write_v(c8vm_vm->c8vm_register, x, kk);
 			break;
+		}
 
 			/* set Vx = Vx + kk */
 		case 0x7000: {
+			if (x >= C8VM_REGISTER_GPR_SIZE) {
+				fprintf(stderr, "c8vm_vm_cpu_execute register Vx out of bounds: %d\n", x);
+				return -1;
+			}
+
 			const uint8_t vx = c8vm_register_read_v(c8vm_vm->c8vm_register, x);
 			uint8_t res = vx + kk;
 			c8vm_register_write_v(c8vm_vm->c8vm_register, x, res);
@@ -206,6 +252,16 @@ static void c8vm_vm_cpu_execute(struct c8vm_vm *c8vm_vm, uint16_t opcode)
 			switch (n) {
 					/* set Vx = Vy */
 				case 0x0: {
+					if (x >= C8VM_REGISTER_GPR_SIZE) {
+						fprintf(stderr, "c8vm_vm_cpu_execute register Vx out of bounds: %d\n", x);
+						return -1;
+					}
+
+					if (y >= C8VM_REGISTER_GPR_SIZE) {
+						fprintf(stderr, "c8vm_vm_cpu_execute register Vy out of bounds: %d\n", y);
+						return -1;
+					}
+
 					const uint8_t vy = c8vm_register_read_v(c8vm_vm->c8vm_register, y);
 					c8vm_register_write_v(c8vm_vm->c8vm_register, x, vy);
 					break;
@@ -213,6 +269,16 @@ static void c8vm_vm_cpu_execute(struct c8vm_vm *c8vm_vm, uint16_t opcode)
 
 					/* set Vx = Vx OR Vy */
 				case 0x1: {
+					if (x >= C8VM_REGISTER_GPR_SIZE) {
+						fprintf(stderr, "c8vm_vm_cpu_execute register Vx out of bounds: %d\n", x);
+						return -1;
+					}
+
+					if (y >= C8VM_REGISTER_GPR_SIZE) {
+						fprintf(stderr, "c8vm_vm_cpu_execute register Vy out of bounds: %d\n", y);
+						return -1;
+					}
+
 					const uint8_t vx = c8vm_register_read_v(c8vm_vm->c8vm_register, x);
 					const uint8_t vy = c8vm_register_read_v(c8vm_vm->c8vm_register, y);
 					uint8_t res = vx | vy;
@@ -222,6 +288,16 @@ static void c8vm_vm_cpu_execute(struct c8vm_vm *c8vm_vm, uint16_t opcode)
 
 					/* set Vx = Vx AND Vy */
 				case 0x2: {
+					if (x >= C8VM_REGISTER_GPR_SIZE) {
+						fprintf(stderr, "c8vm_vm_cpu_execute register Vx out of bounds: %d\n", x);
+						return -1;
+					}
+
+					if (y >= C8VM_REGISTER_GPR_SIZE) {
+						fprintf(stderr, "c8vm_vm_cpu_execute register Vy out of bounds: %d\n", y);
+						return -1;
+					}
+
 					const uint8_t vx = c8vm_register_read_v(c8vm_vm->c8vm_register, x);
 					const uint8_t vy = c8vm_register_read_v(c8vm_vm->c8vm_register, y);
 					uint8_t res = vx & vy;
@@ -231,6 +307,16 @@ static void c8vm_vm_cpu_execute(struct c8vm_vm *c8vm_vm, uint16_t opcode)
 
 					/* set Vx = Vx XOR Vy */
 				case 0x3: {
+					if (x >= C8VM_REGISTER_GPR_SIZE) {
+						fprintf(stderr, "c8vm_vm_cpu_execute register Vx out of bounds: %d\n", x);
+						return -1;
+					}
+
+					if (y >= C8VM_REGISTER_GPR_SIZE) {
+						fprintf(stderr, "c8vm_vm_cpu_execute register Vy out of bounds: %d\n", y);
+						return -1;
+					}
+
 					const uint8_t vx = c8vm_register_read_v(c8vm_vm->c8vm_register, x);
 					const uint8_t vy = c8vm_register_read_v(c8vm_vm->c8vm_register, y);
 					uint8_t res = vx ^ vy;
@@ -240,6 +326,16 @@ static void c8vm_vm_cpu_execute(struct c8vm_vm *c8vm_vm, uint16_t opcode)
 
 					/* set Vx = Vx + Vy, set VF = carry */
 				case 0x4: {
+					if (x >= C8VM_REGISTER_GPR_SIZE) {
+						fprintf(stderr, "c8vm_vm_cpu_execute register Vx out of bounds: %d\n", x);
+						return -1;
+					}
+
+					if (y >= C8VM_REGISTER_GPR_SIZE) {
+						fprintf(stderr, "c8vm_vm_cpu_execute register Vy out of bounds: %d\n", y);
+						return -1;
+					}
+
 					const uint8_t vx = c8vm_register_read_v(c8vm_vm->c8vm_register, x);
 					const uint8_t vy = c8vm_register_read_v(c8vm_vm->c8vm_register, y);
 					uint16_t res = vx + vy;
@@ -252,6 +348,16 @@ static void c8vm_vm_cpu_execute(struct c8vm_vm *c8vm_vm, uint16_t opcode)
 
 					/* set Vx = Vx - Vy, set VF = NOT borrow */
 				case 0x5: {
+					if (x >= C8VM_REGISTER_GPR_SIZE) {
+						fprintf(stderr, "c8vm_vm_cpu_execute register Vx out of bounds: %d\n", x);
+						return -1;
+					}
+
+					if (y >= C8VM_REGISTER_GPR_SIZE) {
+						fprintf(stderr, "c8vm_vm_cpu_execute register Vy out of bounds: %d\n", y);
+						return -1;
+					}
+
 					const uint8_t vx = c8vm_register_read_v(c8vm_vm->c8vm_register, x);
 					const uint8_t vy = c8vm_register_read_v(c8vm_vm->c8vm_register, y);
 					uint8_t res = vx - vy;
@@ -264,6 +370,11 @@ static void c8vm_vm_cpu_execute(struct c8vm_vm *c8vm_vm, uint16_t opcode)
 
 					/* set Vx = Vx SHR 1 */
 				case 0x6: {
+					if (x >= C8VM_REGISTER_GPR_SIZE) {
+						fprintf(stderr, "c8vm_vm_cpu_execute register Vx out of bounds: %d\n", x);
+						return -1;
+					}
+
 					const uint8_t vx = c8vm_register_read_v(c8vm_vm->c8vm_register, x);
 					uint8_t res = vx >> 1;
 					uint8_t vf = (vx & 0x1);
@@ -275,6 +386,16 @@ static void c8vm_vm_cpu_execute(struct c8vm_vm *c8vm_vm, uint16_t opcode)
 
 					/* set Vx = Vy - Vx, set VF = NOT borrow */
 				case 0x7: {
+					if (x >= C8VM_REGISTER_GPR_SIZE) {
+						fprintf(stderr, "c8vm_vm_cpu_execute register Vx out of bounds: %d\n", x);
+						return -1;
+					}
+
+					if (y >= C8VM_REGISTER_GPR_SIZE) {
+						fprintf(stderr, "c8vm_vm_cpu_execute register Vy out of bounds: %d\n", y);
+						return -1;
+					}
+
 					const uint8_t vx = c8vm_register_read_v(c8vm_vm->c8vm_register, x);
 					const uint8_t vy = c8vm_register_read_v(c8vm_vm->c8vm_register, y);
 					uint8_t res = vy - vx;
@@ -287,6 +408,11 @@ static void c8vm_vm_cpu_execute(struct c8vm_vm *c8vm_vm, uint16_t opcode)
 
 					/* set Vx = Vx SHL 1 */
 				case 0xE: {
+					if (x >= C8VM_REGISTER_GPR_SIZE) {
+						fprintf(stderr, "c8vm_vm_cpu_execute register Vx out of bounds: %d\n", x);
+						return -1;
+					}
+
 					const uint8_t vx = c8vm_register_read_v(c8vm_vm->c8vm_register, x);
 					uint8_t res = vx << 1;
 					uint8_t vf = (vx & 0x80);
@@ -306,6 +432,16 @@ static void c8vm_vm_cpu_execute(struct c8vm_vm *c8vm_vm, uint16_t opcode)
 		case 0x9000: {
 			/* skip next instruction if Vx != Vy */
 			if (n == 0x0) {
+				if (x >= C8VM_REGISTER_GPR_SIZE) {
+					fprintf(stderr, "c8vm_vm_cpu_execute register Vx out of bounds: %d\n", x);
+					return -1;
+				}
+
+				if (y >= C8VM_REGISTER_GPR_SIZE) {
+					fprintf(stderr, "c8vm_vm_cpu_execute register Vy out of bounds: %d\n", y);
+					return -1;
+				}
+
 				const uint8_t vx = c8vm_register_read_v(c8vm_vm->c8vm_register, x);
 				const uint8_t vy = c8vm_register_read_v(c8vm_vm->c8vm_register, y);
 
@@ -320,10 +456,15 @@ static void c8vm_vm_cpu_execute(struct c8vm_vm *c8vm_vm, uint16_t opcode)
 		}
 
 			/* set I = nnn */
-		case 0xA000:
+		case 0xA000: {
+			if (nnn >= C8VM_MEMORY_SIZE) {
+				fprintf(stderr, "c8vm_vm_cpu_execute memory address nnn out of bounds: %d\n", nnn);
+				return -1;
+			}
+
 			c8vm_register_write_i(c8vm_vm->c8vm_register, nnn);
-			;
 			break;
+		}
 
 			/* jump to location nnn + V0 */
 		case 0xB000: {
@@ -335,7 +476,12 @@ static void c8vm_vm_cpu_execute(struct c8vm_vm *c8vm_vm, uint16_t opcode)
 
 			/* set Vx = random byte AND kk */
 		case 0xC000: {
-			uint8_t random = rand() % 256;
+			if (x >= C8VM_REGISTER_GPR_SIZE) {
+				fprintf(stderr, "c8vm_vm_cpu_execute register Vx out of bounds: %d\n", x);
+				return -1;
+			}
+
+			uint8_t random = (uint8_t)(rand() % 256);
 			uint8_t res = random & kk;
 			c8vm_register_write_v(c8vm_vm->c8vm_register, x, res);
 			break;
@@ -343,12 +489,34 @@ static void c8vm_vm_cpu_execute(struct c8vm_vm *c8vm_vm, uint16_t opcode)
 
 			/* display n-byte sprite starting at memory location I at (Vx, Vy), set VF = collision */
 		case 0xD000: {
+			if (x >= C8VM_REGISTER_GPR_SIZE) {
+				fprintf(stderr, "c8vm_vm_cpu_execute register Vx out of bounds: %d\n", x);
+				return -1;
+			}
+
+			if (y >= C8VM_REGISTER_GPR_SIZE) {
+				fprintf(stderr, "c8vm_vm_cpu_execute register Vy out of bounds: %d\n", y);
+				return -1;
+			}
+
 			const uint8_t vx = c8vm_register_read_v(c8vm_vm->c8vm_register, x);
 			const uint8_t vy = c8vm_register_read_v(c8vm_vm->c8vm_register, y);
 			const uint16_t i = c8vm_register_read_i(c8vm_vm->c8vm_register);
+
+			if (i > C8VM_MEMORY_SIZE - n) {
+				fprintf(stderr, "c8vm_vm_cpu_execute memory address i out of bounds: %d\n", i);
+				return -1;
+			}
+
 			const uint8_t *sprite = (c8vm_vm->c8vm_memory->memory + i);
-			uint8_t vf = c8vm_display_draw_sprite(c8vm_vm->c8vm_display, vx, vy, sprite, n);
-			c8vm_register_write_v(c8vm_vm->c8vm_register, 0xF, vf);
+
+			int pixel_erased = c8vm_display_draw_sprite(c8vm_vm->c8vm_display, vx, vy, sprite, n);
+
+			if (pixel_erased == -1) {
+				return -1;
+			}
+
+			c8vm_register_write_v(c8vm_vm->c8vm_register, 0xF, (uint8_t)pixel_erased);
 			break;
 		}
 
@@ -356,10 +524,19 @@ static void c8vm_vm_cpu_execute(struct c8vm_vm *c8vm_vm, uint16_t opcode)
 			switch (kk) {
 					/* skip next instruction if key with the value of Vx is pressed */
 				case 0x9E: {
-					const uint8_t vx = c8vm_register_read_v(c8vm_vm->c8vm_register, x);
-					char key = c8vm_keyboard_keycode_to_key(c8vm_vm->c8vm_keyboard, vx);
+					if (x >= C8VM_REGISTER_GPR_SIZE) {
+						fprintf(stderr, "c8vm_vm_cpu_execute register Vx out of bounds: %d\n", x);
+						return -1;
+					}
 
-					if (c8vm_keyboard_is_key_down(c8vm_vm->c8vm_keyboard, key)) {
+					const uint8_t vx = c8vm_register_read_v(c8vm_vm->c8vm_register, x);
+
+					if (vx >= C8VM_KEYBOARD_KEY_SIZE) {
+						fprintf(stderr, "c8vm_vm_cpu_execute keycode out of bounds: %d\n", vx);
+						return -1;
+					}
+
+					if (c8vm_keyboard_is_key_down(c8vm_vm->c8vm_keyboard, (enum c8vm_keycode)vx)) {
 						c8vm_vm_cpu_skip_instruction(c8vm_vm);
 					}
 
@@ -368,10 +545,19 @@ static void c8vm_vm_cpu_execute(struct c8vm_vm *c8vm_vm, uint16_t opcode)
 
 					/* skip next instruction if key with the value of Vx is not pressed */
 				case 0xA1: {
-					const uint8_t vx = c8vm_register_read_v(c8vm_vm->c8vm_register, x);
-					char key = c8vm_keyboard_keycode_to_key(c8vm_vm->c8vm_keyboard, vx);
+					if (x >= C8VM_REGISTER_GPR_SIZE) {
+						fprintf(stderr, "c8vm_vm_cpu_execute register Vx out of bounds: %d\n", x);
+						return -1;
+					}
 
-					if (c8vm_keyboard_is_key_up(c8vm_vm->c8vm_keyboard, key)) {
+					const uint8_t vx = c8vm_register_read_v(c8vm_vm->c8vm_register, x);
+
+					if (vx >= C8VM_KEYBOARD_KEY_SIZE) {
+						fprintf(stderr, "c8vm_vm_cpu_execute keycode out of bounds: %d\n", vx);
+						return -1;
+					}
+
+					if (c8vm_keyboard_is_key_up(c8vm_vm->c8vm_keyboard, (enum c8vm_keycode)vx)) {
 						c8vm_vm_cpu_skip_instruction(c8vm_vm);
 					}
 
@@ -389,6 +575,11 @@ static void c8vm_vm_cpu_execute(struct c8vm_vm *c8vm_vm, uint16_t opcode)
 			switch (kk) {
 					/* set Vx = delay timer value */
 				case 0x07: {
+					if (x >= C8VM_REGISTER_GPR_SIZE) {
+						fprintf(stderr, "c8vm_vm_cpu_execute register Vx out of bounds: %d\n", x);
+						return -1;
+					}
+
 					const uint8_t dt = c8vm_register_read_dt(c8vm_vm->c8vm_register);
 					c8vm_register_write_v(c8vm_vm->c8vm_register, x, dt);
 					break;
@@ -396,14 +587,34 @@ static void c8vm_vm_cpu_execute(struct c8vm_vm *c8vm_vm, uint16_t opcode)
 
 					/* wait for a key press, store the value of the key in Vx */
 				case 0x0A: {
-					char key = c8vm_platform_wait_for_key_press();
-					enum c8vm_keycode keycode = c8vm_keyboard_key_to_keycode(c8vm_vm->c8vm_keyboard, key);
+					if (x >= C8VM_REGISTER_GPR_SIZE) {
+						fprintf(stderr, "c8vm_vm_cpu_execute register Vx out of bounds: %d\n", x);
+						return -1;
+					}
+
+					enum c8vm_keycode keycode = C8VM_KEYCODE_INVALID;
+
+					while (keycode == C8VM_KEYCODE_INVALID) {
+						int key = c8vm_platform_wait_for_key_press();
+
+						if (key == -1) {
+							return -1;
+						}
+
+						keycode = c8vm_keyboard_get_mapped_keycode(c8vm_vm->c8vm_keyboard, key);
+					}
+
 					c8vm_register_write_v(c8vm_vm->c8vm_register, x, (uint8_t)keycode);
 					break;
 				}
 
 					/* set delay timer = Vx */
 				case 0x15: {
+					if (x >= C8VM_REGISTER_GPR_SIZE) {
+						fprintf(stderr, "c8vm_vm_cpu_execute register Vx out of bounds: %d\n", x);
+						return -1;
+					}
+
 					const uint8_t vx = c8vm_register_read_v(c8vm_vm->c8vm_register, x);
 					c8vm_register_write_dt(c8vm_vm->c8vm_register, vx);
 					break;
@@ -411,6 +622,11 @@ static void c8vm_vm_cpu_execute(struct c8vm_vm *c8vm_vm, uint16_t opcode)
 
 					/* set sound timer = Vx */
 				case 0x18: {
+					if (x >= C8VM_REGISTER_GPR_SIZE) {
+						fprintf(stderr, "c8vm_vm_cpu_execute register Vx out of bounds: %d\n", x);
+						return -1;
+					}
+
 					const uint8_t vx = c8vm_register_read_v(c8vm_vm->c8vm_register, x);
 					c8vm_register_write_st(c8vm_vm->c8vm_register, vx);
 					break;
@@ -418,24 +634,57 @@ static void c8vm_vm_cpu_execute(struct c8vm_vm *c8vm_vm, uint16_t opcode)
 
 					/* set I = I + Vx */
 				case 0x1E: {
+					if (x >= C8VM_REGISTER_GPR_SIZE) {
+						fprintf(stderr, "c8vm_vm_cpu_execute register Vx out of bounds: %d\n", x);
+						return -1;
+					}
+
 					const uint16_t i = c8vm_register_read_i(c8vm_vm->c8vm_register);
 					const uint8_t vx = c8vm_register_read_v(c8vm_vm->c8vm_register, x);
 					uint16_t res = i + vx;
+
+					if (res >= C8VM_MEMORY_SIZE) {
+						fprintf(stderr, "c8vm_vm_cpu_execute memory address i out of bounds: %d\n", i);
+						return -1;
+					}
+
 					c8vm_register_write_i(c8vm_vm->c8vm_register, res);
 					break;
 				}
 
 					/* set I = location of sprite for digit Vx */
 				case 0x29: {
+					if (x >= C8VM_REGISTER_GPR_SIZE) {
+						fprintf(stderr, "c8vm_vm_cpu_execute register Vx out of bounds: %d\n", x);
+						return -1;
+					}
+
 					const uint8_t vx = c8vm_register_read_v(c8vm_vm->c8vm_register, x);
 					uint16_t res = vx * C8VM_CHARACTER_SET_HEIGHT;
+
+					if (res > C8VM_MEMORY_SIZE - C8VM_CHARACTER_SET_HEIGHT) {
+						fprintf(stderr, "c8vm_vm_cpu_execute memory address i out of bounds: %d\n", res);
+						return -1;
+					}
+
 					c8vm_register_write_i(c8vm_vm->c8vm_register, res);
 					break;
 				}
 
 					/* store BCD representation of Vx in memory locations I, I+1, and I+2 */
 				case 0x33: {
+					if (x >= C8VM_REGISTER_GPR_SIZE) {
+						fprintf(stderr, "c8vm_vm_cpu_execute register Vx out of bounds: %d\n", x);
+						return -1;
+					}
+
 					const uint16_t i = c8vm_register_read_i(c8vm_vm->c8vm_register);
+
+					if (i > C8VM_MEMORY_SIZE - 3) {
+						fprintf(stderr, "c8vm_vm_cpu_execute memory address i out of bounds: %d\n", i);
+						return -1;
+					}
+
 					const uint8_t vx = c8vm_register_read_v(c8vm_vm->c8vm_register, x);
 					uint8_t hundreds = vx / 100;
 					uint8_t tens = (vx / 10) % 10;
@@ -449,7 +698,17 @@ static void c8vm_vm_cpu_execute(struct c8vm_vm *c8vm_vm, uint16_t opcode)
 
 					/* store registers V0 through Vx in memory starting at location I */
 				case 0x55: {
+					if (x >= C8VM_REGISTER_GPR_SIZE) {
+						fprintf(stderr, "c8vm_vm_cpu_execute register Vx out of bounds: %d\n", x);
+						return -1;
+					}
+
 					const uint16_t i = c8vm_register_read_i(c8vm_vm->c8vm_register);
+
+					if (i > C8VM_MEMORY_SIZE - (x + 1)) {
+						fprintf(stderr, "c8vm_vm_cpu_execute memory address i out of bounds: %d\n", i);
+						return -1;
+					}
 
 					for (uint8_t j = 0; j <= x; j++) {
 						uint8_t reg_data = c8vm_register_read_v(c8vm_vm->c8vm_register, j);
@@ -461,7 +720,17 @@ static void c8vm_vm_cpu_execute(struct c8vm_vm *c8vm_vm, uint16_t opcode)
 
 					/* read registers V0 through Vx from memory starting at location I */
 				case 0x65: {
+					if (x >= C8VM_REGISTER_GPR_SIZE) {
+						fprintf(stderr, "c8vm_vm_cpu_execute register Vx out of bounds: %d\n", x);
+						return -1;
+					}
+
 					const uint16_t i = c8vm_register_read_i(c8vm_vm->c8vm_register);
+
+					if (i > C8VM_MEMORY_SIZE - (x + 1)) {
+						fprintf(stderr, "c8vm_vm_cpu_execute memory address i out of bounds: %d\n", i);
+						return -1;
+					}
 
 					for (uint8_t j = 0; j <= x; j++) {
 						uint8_t reg_data = c8vm_memory_read_uint8(c8vm_vm->c8vm_memory, i + j);
@@ -477,12 +746,18 @@ static void c8vm_vm_cpu_execute(struct c8vm_vm *c8vm_vm, uint16_t opcode)
 			}
 			break;
 		}
+
+		default:
+			fprintf(stderr, "unknown opcode: 0x%04X\n", opcode);
+			return -1;
 	}
+
+	return 0;
 }
 
 static void c8vm_vm_cpu_skip_instruction(struct c8vm_vm *c8vm_vm)
 {
 	uint16_t pc = c8vm_register_read_pc(c8vm_vm->c8vm_register);
-	pc += 2;
+	pc += C8VM_INSTRUCTION_SIZE;
 	c8vm_register_write_pc(c8vm_vm->c8vm_register, pc);
 }
